@@ -44,16 +44,18 @@ def run_all_tasks():
 
         env = TrustEnv(DATA, task=task)
 
-        rb_reward, rb_trust = evaluate_rule_based(env)
-        llm_reward, llm_trust = evaluate_llm(env)
+        rb_reward, rb_trust, rb_rewards, rb_trusts = evaluate_rule_based(env)
+        llm_reward, llm_trust, llm_rewards, llm_trusts = evaluate_llm(env)
 
         print("\nRule-Based Agent:")
         print(f"  Avg Reward: {round(rb_reward, 3)}")
         print(f"  Avg Trust : {round(rb_trust, 3)}")
+        print("  Sample Rewards:", [round(r, 2) for r in rb_rewards[:5]])
 
         print("\nLLM Agent:")
         print(f"  Avg Reward: {round(llm_reward, 3)}")
         print(f"  Avg Trust : {round(llm_trust, 3)}")
+        print("  Sample Rewards:", [round(r, 2) for r in llm_rewards[:5]])
 
         results.append({
             "task": task,
