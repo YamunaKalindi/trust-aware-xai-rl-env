@@ -1,20 +1,10 @@
-from uuid import uuid4
-
-from openenv.core.env_server.interfaces import Environment
-from openenv.core.env_server.types import State
-
-try:
-    from ..models import TrustXaiAction, TrustXaiObservation
-except ImportError:
-    from models import TrustXaiAction, TrustXaiObservation
+import random
 
 
-class TrustXaiEnvironment(Environment):
-    SUPPORTS_CONCURRENT_SESSIONS: bool = True
-
+class TrustXaiEnvironment:
     def __init__(self):
-        self._state = State(episode_id=str(uuid4()), step_count=0)
         self.trust_score = 0.5
+        self.step_count = 0
 
         self.data = [
             {
@@ -34,28 +24,34 @@ class TrustXaiEnvironment(Environment):
         self.current = None
         self.max_steps = 3
 
-    def reset(self) -> TrustXaiObservation:
-        import random
-
-        self._state = State(episode_id=str(uuid4()), step_count=0)
+    def reset(self):
+        self.step_count = 0
         self.trust_score = 0.5
         self.current = random.choice(self.data)
 
-        return TrustXaiObservation(
-            observation=f"{self.current['prediction']} | {self.current['features']} | {self.current['user_type']}",
-            done=False,
-            reward=0.0,
-        )
+        return {
+            "observation": {
+                "prediction": self.current["prediction"],
+                "features": self.current["features"],
+                "user_type": self.current["user_type"],
+                "trust_score": self.trust_score,
+            },
+            "reward": 0.0,
+            "done": False,
+            "info": {},
+        }
 
-    def step(self, action: TrustXaiAction) -> TrustXaiObservation:
-        import random
-
-        self._state.step_count += 1
+    def step(self, action):
+        self.step_count += 1
 
         user = self.current["user_type"]
         correct_action = self.current["correct_action"]
 
-        chosen = action.action
+        # handle both dict and object input safely
+        if isinstance(action, dict):
+            chosen = action.get("action", "simple")
+        else:
+            chosen = getattr(action, "action", "simple")
 
         # --- Correctness ---
         correctness = 1 if chosen == correct_action else -1
@@ -74,17 +70,19 @@ class TrustXaiEnvironment(Environment):
 
         reward = correctness + personalization + (0.5 * trust_change)
 
-        done = self._state.step_count >= self.max_steps
+        done = self.step_count >= self.max_steps
 
-        # Next state transition
+        # Move to next state
         self.current = random.choice(self.data)
 
-        return TrustXaiObservation(
-            observation=f"{self.current['prediction']} | {self.current['features']} | {self.current['user_type']} | trust={self.trust_score:.2f}",
-            reward=float(reward),
-            done=done,
-        )
-
-    @property
-    def state(self) -> State:
-        return self._state
+        return {
+            "observation": {
+                "prediction": self.current["prediction"],
+                "features": self.current["features"],
+                "user_type": self.current["user_type"],
+                "trust_score": self.trust_score,
+            },
+            "reward": float(reward),
+            "done": done,
+            "info": {},
+        }
