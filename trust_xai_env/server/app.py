@@ -1,84 +1,46 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import Optional, Any
+import uvicorn
 
-"""
-FastAPI application for the Trust Xai Env Environment.
+from trust_xai_env.server.trust_xai_env_environment import TrustXaiEnvironment
 
-This module creates an HTTP server that exposes the TrustXaiEnvironment
-over HTTP and WebSocket endpoints, compatible with EnvClient.
+app = FastAPI()
 
-Endpoints:
-    - POST /reset: Reset the environment
-    - POST /step: Execute an action
-    - GET /state: Get current environment state
-    - GET /schema: Get action/observation schemas
-    - WS /ws: WebSocket endpoint for persistent sessions
-
-Usage:
-    # Development (with auto-reload):
-    uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
-
-    # Production:
-    uvicorn server.app:app --host 0.0.0.0 --port 8000 --workers 4
-
-    # Or run directly:
-    python -m server.app
-"""
-
-try:
-    from openenv.core.env_server.http_server import create_app
-except Exception as e:  # pragma: no cover
-    raise ImportError(
-        "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
-    ) from e
-
-try:
-    from ..models import TrustXaiAction, TrustXaiObservation
-    from .trust_xai_env_environment import TrustXaiEnvironment
-except ModuleNotFoundError:
-    from models import TrustXaiAction, TrustXaiObservation
-    from server.trust_xai_env_environment import TrustXaiEnvironment
+env = TrustXaiEnvironment()
 
 
-# Create the app with web interface and README integration
-app = create_app(
-    TrustXaiEnvironment,
-    TrustXaiAction,
-    TrustXaiObservation,
-    env_name="trust_xai_env",
-    max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
-)
+class Action(BaseModel):
+    action: str
 
 
-def main(host: str = "0.0.0.0", port: int = 8000):
-    """
-    Entry point for direct execution via uv run or python -m.
+@app.post("/reset")
+def reset(body: dict = {}):
+    obs = env.reset()
+    return {
+        "observation": obs.observation,
+        "reward": 0.0,
+        "done": False,
+        "info": {}
+    }
 
-    This function enables running the server without Docker:
-        uv run --project . server
-        uv run --project . server --port 8001
-        python -m trust_xai_env.server.app
 
-    Args:
-        host: Host address to bind to (default: "0.0.0.0")
-        port: Port number to listen on (default: 8000)
+@app.post("/step")
+def step(action: Action):
+    obs = env.step(action)
 
-    For production deployments, consider using uvicorn directly with
-    multiple workers:
-        uvicorn trust_xai_env.server.app:app --workers 4
-    """
-    import uvicorn
+    return {
+        "observation": obs.observation,
+        "reward": float(obs.reward),
+        "done": bool(obs.done),
+        "info": {}
+    }
 
-    uvicorn.run(app, host=host, port=port)
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
-    main(port=args.port)
+    uvicorn.run(app, host="0.0.0.0", port=7860)
