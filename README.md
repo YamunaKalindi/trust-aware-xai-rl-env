@@ -1,198 +1,255 @@
-# Trust-Aware XAI RL Environment
-
-## Overview
-
-This project presents a reinforcement learning (RL) environment designed to study how AI systems should **select explanation strategies** when interacting with users. Instead of generating explanations directly, the environment focuses on evaluating *which type of explanation* is most appropriate given the context.
-
-The environment models a real-world scenario where AI systems must explain their decisions to users with varying levels of expertise, while maintaining and improving user trust. This problem is formulated as a **sequential decision-making task**, where actions influence future states (user trust and difficulty), making it a true reinforcement learning setting rather than static classification.
-
+---
+title: Trust Xai Env Environment Server
+emoji: 🏒
+colorFrom: pink
+colorTo: indigo
+sdk: docker
+pinned: false
+app_port: 8000
+base_path: /web
+tags:
+  - openenv
 ---
 
-## Motivation
+# Trust Xai Env Environment
 
-Modern AI systems are often criticized as **“black boxes”**, producing outputs without clear reasoning. While Explainable AI (XAI) methods attempt to generate explanations, an equally important question remains:
+A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
 
-> *Which type of explanation should be given to which user?*
+## Quick Start
 
-This project addresses that gap by simulating a decision-making process where an AI agent must choose the most appropriate explanation strategy.
+The simplest way to use the Trust Xai Env environment is through the `TrustXaiEnv` class:
 
-The environment emphasizes:
+```python
+from trust_xai_env import TrustXaiAction, TrustXaiEnv
 
-* Correctness of explanation
-* Personalization based on user expertise
-* Trust dynamics over time
+try:
+    # Create environment from Docker image
+    trust_xai_envenv = TrustXaiEnv.from_docker_image("trust_xai_env-env:latest")
 
----
+    # Reset
+    result = trust_xai_envenv.reset()
+    print(f"Reset: {result.observation.echoed_message}")
 
-## Problem Statement
+    # Send multiple messages
+    messages = ["Hello, World!", "Testing echo", "Final message"]
 
-Design an environment where an agent learns to:
+    for msg in messages:
+        result = trust_xai_envenv.step(TrustXaiAction(message=msg))
+        print(f"Sent: '{msg}'")
+        print(f"  → Echoed: '{result.observation.echoed_message}'")
+        print(f"  → Length: {result.observation.message_length}")
+        print(f"  → Reward: {result.reward}")
 
-1. Select an appropriate explanation strategy
-2. Adapt explanations based on user type
-3. Maximize user trust across interactions
+finally:
+    # Always clean up
+    trust_xai_envenv.close()
+```
 
----
+That's it! The `TrustXaiEnv.from_docker_image()` method handles:
+- Starting the Docker container
+- Waiting for the server to be ready
+- Connecting to the environment
+- Container cleanup when you call `close()`
 
-## Environment Design
+## Building the Docker Image
 
-### State Space
+Before using the environment, you need to build the Docker image:
 
-Each state represents a real-world AI decision scenario and includes:
+```bash
+# From project root
+docker build -t trust_xai_env-env:latest -f server/Dockerfile .
+```
 
-* `prediction` – AI system output (e.g., "Loan Rejected")
-* `features` – key factors influencing the decision
-* `user_type` – user expertise level (`beginner` / `expert`)
-* `trust_score` – current trust level (range: 0–1)
-* `task` – difficulty level (`easy`, `medium`, `hard`)
+## Deploying to Hugging Face Spaces
 
----
+You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
 
-### Action Space
+```bash
+# From the environment directory (where openenv.yaml is located)
+openenv push
 
-The agent selects one of the following explanation strategies:
+# Or specify options
+openenv push --namespace my-org --private
+```
 
-* `simple` – brief, easy-to-understand explanation
-* `detailed` – technical or comprehensive explanation
-* `counterfactual` – “what could change the outcome” explanation
-* `none` – no explanation
+The `openenv push` command will:
+1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
+2. Prepare a custom build for Hugging Face Docker space (enables web interface)
+3. Upload to Hugging Face (ensuring you're logged in)
 
----
+### Prerequisites
 
-### Reward Function
+- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
 
-The reward is designed to reflect real-world explanation quality:
+### Options
 
-#### 1. Correctness
+- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
+- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
+- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
+- `--private`: Deploy the space as private (default: public)
 
-* +1 → correct explanation strategy
-* -1 → incorrect strategy
+### Examples
 
-#### 2. Personalization
+```bash
+# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
+openenv push
 
-* +1 → matches user type
-* 0 → neutral
+# Push to a specific repository
+openenv push --repo-id my-org/my-env
 
-#### 3. Trust Dynamics
+# Push with a custom base image
+openenv push --base-image ghcr.io/meta-pytorch/openenv-base:latest
 
-* +0.1 → trust increases for correct explanation
-* -0.1 → trust decreases for incorrect explanation
+# Push as a private space
+openenv push --private
 
----
+# Combine options
+openenv push --repo-id my-org/my-env --base-image custom-base:latest --private
+```
 
-## Tasks (Difficulty Levels)
+After deployment, your space will be available at:
+`https://huggingface.co/spaces/<repo-id>`
 
-The environment includes three tasks with increasing complexity:
+The deployed space includes:
+- **Web Interface** at `/web` - Interactive UI for exploring the environment
+- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
+- **Health Check** at `/health` - Container health monitoring
+- **WebSocket** at `/ws` - Persistent session endpoint for low-latency interactions
 
-### 🟢 Easy Task — Correctness
+## Environment Details
 
-* Objective: Choose the correct explanation strategy
-* Reward depends only on correctness
-* Single-step episode
+### Action
+**TrustXaiAction**: Contains a single field
+- `message` (str) - The message to echo back
 
----
+### Observation
+**TrustXaiObservation**: Contains the echo response and metadata
+- `echoed_message` (str) - The message echoed back
+- `message_length` (int) - Length of the message
+- `reward` (float) - Reward based on message length (length × 0.1)
+- `done` (bool) - Always False for echo environment
+- `metadata` (dict) - Additional info like step count
 
-### 🟡 Medium Task — Personalization
+### Reward
+The reward is calculated as: `message_length × 0.1`
+- "Hi" → reward: 0.2
+- "Hello, World!" → reward: 1.3
+- Empty message → reward: 0.0
 
-* Objective: Choose explanation that is both correct and suitable for the user
-* Reward includes correctness + personalization
-* Multi-step episode (short horizon)
+## Advanced Usage
 
----
+### Connecting to an Existing Server
 
-### 🔴 Hard Task — Trust Optimization
+If you already have a Trust Xai Env environment server running, you can connect directly:
 
-* Objective: Maximize user trust over multiple interactions
-* Multi-step episode
-* Reward includes correctness, personalization, and trust changes
-
----
-
-## Grading and Evaluation
-
-Each task includes a programmatic grader that outputs a score between **0.0 and 1.0**.
-
-### Evaluation Results (Baseline)
-
-* Easy: **1.0**
-* Medium: **1.0**
-* Hard: **~0.8**
-
-These scores indicate that:
-
-* The environment is deterministic for simpler tasks
-* The hard task introduces meaningful complexity
-
----
-
-## Baseline Agent
-
-A baseline agent is implemented using a Hugging Face Transformer model (Flan-T5). The agent observes the environment state and selects an explanation strategy.
-
-The system is **model-agnostic**, meaning any LLM (e.g., LLaMA, Mistral) can be plugged in.
-
----
-## Agent Evaluation
-
-We evaluate two types of agents in the environment:
-
-### 1. Rule-Based Agent
-- Uses deterministic policies based on user type
-- Serves as an upper bound benchmark
-
-### 2. LLM Agent (Flan-T5)
-- Selects actions based on natural language understanding
-- Demonstrates real-world AI behavior under uncertainty
-
-### Key Results
-
-| Agent | Easy | Medium | Hard |
-|------|------|--------|------|
-| Rule-Based | 1.0 | 1.0 | ~0.8 |
-| LLM | lower | moderate | strong |
-
-We observe that:
-- LLM struggles in simple/static settings
-- Performs significantly better in multi-step environments
-- Improves trust over time through interaction
-
------
-
-## Key Contributions
-
-* A novel RL environment for **explanation strategy selection**
-* Integration of **user modeling** and **trust dynamics**
-* Multi-level task design with increasing complexity
-* Deterministic grading for reproducible evaluation
-* Alignment with real-world Human-AI interaction scenarios
-
----
-
-## Why This Matters
-
-This environment goes beyond traditional XAI approaches by focusing not just on *what explanations are*, but on:
-
-> **How explanations should be chosen in human-centric AI systems**
-
-It provides a foundation for training and evaluating AI agents that are:
-
-* More transparent
-* More adaptive
-* More trustworthy
-
----
-
-## Future Work
-
-* Integration with real-world datasets
-* More nuanced user modeling
-* Dynamic trust decay and recovery mechanisms
-* Multi-agent interaction scenarios
-
----
-
-## Conclusion
-
-This project introduces a structured way to evaluate explanation strategies in AI systems. By combining reinforcement learning with explainability and trust modeling, it addresses a critical gap in modern AI deployment. This work highlights that explanation selection should be treated as a **sequential, adaptive decision problem**, not a one-step prediction task.
-
----
+```python
+from trust_xai_env import TrustXaiEnv
+
+# Connect to existing server
+trust_xai_envenv = TrustXaiEnv(base_url="<ENV_HTTP_URL_HERE>")
+
+# Use as normal
+result = trust_xai_envenv.reset()
+result = trust_xai_envenv.step(TrustXaiAction(message="Hello!"))
+```
+
+Note: When connecting to an existing server, `trust_xai_envenv.close()` will NOT stop the server.
+
+### Using the Context Manager
+
+The client supports context manager usage for automatic connection management:
+
+```python
+from trust_xai_env import TrustXaiAction, TrustXaiEnv
+
+# Connect with context manager (auto-connects and closes)
+with TrustXaiEnv(base_url="http://localhost:8000") as env:
+    result = env.reset()
+    print(f"Reset: {result.observation.echoed_message}")
+    # Multiple steps with low latency
+    for msg in ["Hello", "World", "!"]:
+        result = env.step(TrustXaiAction(message=msg))
+        print(f"Echoed: {result.observation.echoed_message}")
+```
+
+The client uses WebSocket connections for:
+- **Lower latency**: No HTTP connection overhead per request
+- **Persistent session**: Server maintains your environment state
+- **Efficient for episodes**: Better for many sequential steps
+
+### Concurrent WebSocket Sessions
+
+The server supports multiple concurrent WebSocket connections. To enable this,
+modify `server/app.py` to use factory mode:
+
+```python
+# In server/app.py - use factory mode for concurrent sessions
+app = create_app(
+    TrustXaiEnvironment,  # Pass class, not instance
+    TrustXaiAction,
+    TrustXaiObservation,
+    max_concurrent_envs=4,  # Allow 4 concurrent sessions
+)
+```
+
+Then multiple clients can connect simultaneously:
+
+```python
+from trust_xai_env import TrustXaiAction, TrustXaiEnv
+from concurrent.futures import ThreadPoolExecutor
+
+def run_episode(client_id: int):
+    with TrustXaiEnv(base_url="http://localhost:8000") as env:
+        result = env.reset()
+        for i in range(10):
+            result = env.step(TrustXaiAction(message=f"Client {client_id}, step {i}"))
+        return client_id, result.observation.message_length
+
+# Run 4 episodes concurrently
+with ThreadPoolExecutor(max_workers=4) as executor:
+    results = list(executor.map(run_episode, range(4)))
+```
+
+## Development & Testing
+
+### Direct Environment Testing
+
+Test the environment logic directly without starting the HTTP server:
+
+```bash
+# From the server directory
+python3 server/trust_xai_env_environment.py
+```
+
+This verifies that:
+- Environment resets correctly
+- Step executes actions properly
+- State tracking works
+- Rewards are calculated correctly
+
+### Running Locally
+
+Run the server locally for development:
+
+```bash
+uvicorn server.app:app --reload
+```
+
+## Project Structure
+
+```
+trust_xai_env/
+├── .dockerignore         # Docker build exclusions
+├── __init__.py            # Module exports
+├── README.md              # This file
+├── openenv.yaml           # OpenEnv manifest
+├── pyproject.toml         # Project metadata and dependencies
+├── uv.lock                # Locked dependencies (generated)
+├── client.py              # TrustXaiEnv client
+├── models.py              # Action and Observation models
+└── server/
+    ├── __init__.py        # Server module exports
+    ├── trust_xai_env_environment.py  # Core environment logic
+    ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
+    └── Dockerfile         # Container image definition
+```
