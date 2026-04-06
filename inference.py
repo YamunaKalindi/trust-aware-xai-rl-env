@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Request
-
 from env.trust_env import TrustEnv
 
 app = FastAPI()
 
+# Global environment instance
 env = None
 
+# Sample data
 DATA = [
     {
         "prediction": "Loan Rejected",
@@ -22,33 +23,52 @@ DATA = [
 ]
 
 
+# Root endpoint (health check)
 @app.get("/")
 def root():
-    return {"message": "Server running"}
+    return {"status": "ok"}
 
 
+# RESET endpoint (VERY IMPORTANT)
 @app.post("/reset")
-def reset():
+@app.post("/reset/")
+async def reset(request: Request):
     global env
+
+    # consume request body (important for OpenEnv)
+    try:
+        await request.json()
+    except:
+        pass
+
     env = TrustEnv(DATA, task="hard")
     state = env.reset()
-    return {"state": state}
+
+    return {
+        "state": state
+    }
 
 
+# STEP endpoint
 @app.post("/step")
+@app.post("/step/")
 async def step(request: Request):
     global env
 
     if env is None:
-        return {"error": "Call /reset first"}
+        return {"error": "Environment not initialized. Call /reset first."}
 
-    data = await request.json()
+    try:
+        data = await request.json()
+    except:
+        data = {}
+
     action = data.get("action", "simple")
 
     state, reward, done, _ = env.step(action)
 
     return {
         "state": state,
-        "reward": reward,
-        "done": done
+        "reward": float(reward),
+        "done": bool(done)
     }
