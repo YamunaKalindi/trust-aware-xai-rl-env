@@ -1,9 +1,22 @@
+import logging
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("torch").setLevel(logging.ERROR)
 import os
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+
+import os
+import asyncio
+
 from agent.llm_agent import get_action_from_llm
-from env.trust_env import TrustEnv
+from trust_xai_env.server.trust_xai_env_environment import TrustXaiEnvironment
+from trust_xai_env.models import TrustXaiAction
+
 
 TASK_NAME = "trust-xai"
-BENCHMARK = "custom-env"
+BENCHMARK = "openenv"
 MODEL_NAME = os.getenv("MODEL_NAME", "flan-t5")
 
 MAX_STEPS = 5
@@ -28,25 +41,33 @@ def log_end(success, steps, score, rewards):
     )
 
 
-def run():
-    DATA = [
-        {
-            "prediction": "Loan Rejected",
-            "features": "Low income, poor credit score",
-            "user_type": "beginner",
-            "correct_action": "simple",
-        },
-        {
-            "prediction": "Loan Approved",
-            "features": "High income, good credit score",
-            "user_type": "expert",
-            "correct_action": "detailed",
-        },
-    ]
+# 🔥 NEW: parse OpenEnv observation → structured state
+def parse_observation(obs_str):
+    parts = obs_str.split("|")
 
-    env = TrustEnv(DATA, task="hard")
+    prediction = parts[0].strip()
+    features = parts[1].strip()
+    user_type = parts[2].strip()
 
-    state = env.reset()
+    trust_score = 0.5
+    if len(parts) > 3 and "trust=" in parts[3]:
+        trust_score = float(parts[3].split("=")[-1])
+
+    return {
+        "prediction": prediction,
+        "features": features,
+        "user_type": user_type,
+        "trust_score": trust_score,
+    }
+
+
+async def run():
+    env = TrustXaiEnvironment()
+
+    obs = env.reset()
+
+    # 🔥 UPDATED
+    state = parse_observation(obs.observation)
 
     rewards = []
     total_reward = 0
@@ -54,19 +75,26 @@ def run():
     log_start()
 
     for step in range(1, MAX_STEPS + 1):
-        action = get_action_from_llm(state)
+        action_str = get_action_from_llm(state)
 
-        state, reward, done, _ = env.step(action)
+        action = TrustXaiAction(action=action_str)
+
+        obs = env.step(action)
+
+        reward = obs.reward
+        done = obs.done
+
+        # 🔥 UPDATED
+        state = parse_observation(obs.observation)
 
         rewards.append(reward)
         total_reward += reward
 
-        log_step(step, action, reward, done)
+        log_step(step, action_str, reward, done)
 
         if done:
             break
 
-    # Normalize score to [0,1]
     score = max(0, min(1, (total_reward + 5) / 10))
     success = score > 0.5
 
@@ -74,4 +102,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    asyncio.run(run())
