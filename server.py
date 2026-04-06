@@ -32,6 +32,7 @@ DATA = [
 
 
 @app.post("/reset")
+@app.post("/reset/")
 def reset():
     global env
     env = TrustEnv(DATA, task="hard")
@@ -40,6 +41,7 @@ def reset():
 
 
 @app.post("/step")
+@app.post("/step/")
 def step(req: StepRequest):
     global env
     state, reward, done, _ = env.step(req.action)
@@ -49,3 +51,7 @@ def step(req: StepRequest):
         "reward": reward,
         "done": done
     }
+
+@app.get("/")
+def root():
+    return {"message": "Server running"}
