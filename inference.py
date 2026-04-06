@@ -1,21 +1,10 @@
-import os
-from agent.llm_agent import get_action_from_llm
+from fastapi import FastAPI, Request
+
 from env.trust_env import TrustEnv
 
-# ==============================
-# ENV VARIABLES (REQUIRED)
-# ==============================
+app = FastAPI()
 
-API_BASE_URL = os.getenv("API_BASE_URL", "local")
-MODEL_NAME = os.getenv("MODEL_NAME", "flan-t5")
-HF_TOKEN = os.getenv("HF_TOKEN")  # optional
-
-# Optional
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
-
-# ==============================
-# DATA (same as your main.py)
-# ==============================
+env = None
 
 DATA = [
     {
@@ -33,43 +22,33 @@ DATA = [
 ]
 
 
-# ==============================
-# MAIN INFERENCE LOOP
-# ==============================
+@app.get("/")
+def root():
+    return {"message": "Server running"}
 
-def run_inference(task="hard"):
-    env = TrustEnv(DATA, task=task)
 
+@app.post("/reset")
+def reset():
+    global env
+    env = TrustEnv(DATA, task="hard")
     state = env.reset()
-
-    print("START")
-
-    step_id = 0
-
-    while True:
-        action = get_action_from_llm(state)
-
-        state, reward, done, _ = env.step(action)
-
-        print(f"STEP {step_id}")
-        print({
-            "action": action,
-            "reward": round(reward, 3),
-            "trust": round(state["trust_score"], 3),
-            "reaction": state["reaction"]
-        })
-
-        step_id += 1
-
-        if done:
-            break
-
-    print("END")
+    return {"state": state}
 
 
-# ==============================
-# ENTRY POINT
-# ==============================
+@app.post("/step")
+async def step(request: Request):
+    global env
 
-if __name__ == "__main__":
-    run_inference(task="hard")
+    if env is None:
+        return {"error": "Call /reset first"}
+
+    data = await request.json()
+    action = data.get("action", "simple")
+
+    state, reward, done, _ = env.step(action)
+
+    return {
+        "state": state,
+        "reward": reward,
+        "done": done
+    }
