@@ -41,43 +41,57 @@ def log_end(success, steps, score, rewards):
 
 
 async def run():
-    env = TrustXaiEnvironment()
+    try:
+        env = TrustXaiEnvironment()
 
-    obs = env.reset()
+        obs = env.reset()
 
-    # ✅ correct
-    state = obs["observation"]
+        if not isinstance(obs, dict) or "observation" not in obs:
+            print("[ERROR] Invalid reset response")
+            return
 
-    rewards = []
-    total_reward = 0
-
-    log_start()
-
-    for step in range(1, MAX_STEPS + 1):
-        action_str = get_action_from_llm(state)
-
-        # ✅ env expects dict now
-        action = {"action": action_str}
-
-        obs = env.step(action)
-
-        # ✅ FIXED
-        reward = obs["reward"]
-        done = obs["done"]
         state = obs["observation"]
 
-        rewards.append(reward)
-        total_reward += reward
+        rewards = []
+        total_reward = 0
 
-        log_step(step, action_str, reward, done)
+        log_start()
 
-        if done:
-            break
+        for step in range(1, MAX_STEPS + 1):
+            try:
+                action_str = get_action_from_llm(state)
 
-    score = max(0, min(1, (total_reward + 5) / 10))
-    success = score > 0.5
+                action = {"action": action_str}
 
-    log_end(success, step, score, rewards)
+                obs = env.step(action)
+
+                if not isinstance(obs, dict):
+                    print("[ERROR] Invalid step response")
+                    break
+
+                reward = obs.get("reward", 0.0)
+                done = obs.get("done", True)
+                state = obs.get("observation", {})
+
+                rewards.append(reward)
+                total_reward += reward
+
+                log_step(step, action_str, reward, done)
+
+                if done:
+                    break
+
+            except Exception as step_error:
+                print(f"[STEP ERROR] {step_error}")
+                break
+
+        score = max(0, min(1, (total_reward + 5) / 10))
+        success = score > 0.5
+
+        log_end(success, step, score, rewards)
+
+    except Exception as e:
+        print(f"[FATAL ERROR] {e}")
 
 
 if __name__ == "__main__":
