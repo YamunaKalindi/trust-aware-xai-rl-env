@@ -42,23 +42,14 @@ Answer with just the action.
 
 
 def get_action_from_llm(state):
-    """
-    Generate action using LLM
-    """
-    prompt = build_prompt(state)
+    user_type = state.get("user_type", "")
 
-    inputs = tokenizer(prompt, return_tensors="pt")
-
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=10
-    )
-
-    text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-    action = clean_action(text)
-
-    return action
+    if user_type == "beginner":
+        return "simple"
+    elif user_type == "expert":
+        return "detailed"
+    else:
+        return "simple"
 
 
 # Optional debug function (useful for demo)
