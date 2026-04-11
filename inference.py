@@ -9,14 +9,13 @@ os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 import asyncio
-
 import sys
-import os
 
+# Ensure current directory is in path
 sys.path.append(os.getcwd())
 
 from llm_agent import get_action_from_llm
-from server.trust_xai_env_environment import TrustXaiEnvironment
+from client import TrustXaiEnv
 
 
 TASK_NAME = "trust-xai"
@@ -45,17 +44,39 @@ def log_end(success, steps, score, rewards):
     )
 
 
+def extract_state(result):
+    """
+    Safely extract state from OpenEnv StepResult / ResetResult
+    """
+    try:
+        obs = result.observation.observation
+
+        return {
+            "prediction": obs.get("prediction", ""),
+            "features": obs.get("features", ""),
+            "user_type": obs.get("user_type", ""),
+            "trust_score": obs.get("trust_score", 0.5),
+        }
+
+    except Exception as e:
+        print(f"[STATE ERROR] {e}")
+        return {
+            "prediction": "",
+            "features": "",
+            "user_type": "beginner",
+            "trust_score": 0.5,
+        }
+
+
 async def run():
     try:
-        env = TrustXaiEnvironment()
+        # ✅ Connect to Dockerized OpenEnv
+        env = TrustXaiEnv.from_docker_image("trust_xai_env-env:latest")
 
-        obs = env.reset()
+        # ✅ Reset
+        result = env.reset()
 
-        if not isinstance(obs, dict) or "observation" not in obs:
-            print("[ERROR] Invalid reset response")
-            return
-
-        state = obs["observation"]
+        state = extract_state(result)
 
         rewards = []
         total_reward = 0
@@ -64,19 +85,17 @@ async def run():
 
         for step in range(1, MAX_STEPS + 1):
             try:
+                # ✅ Get action from LLM
                 action_str = get_action_from_llm(state)
 
-                action = {"action": action_str}
+                # ✅ Step environment
+                result = env.step({"action": action_str})
 
-                obs = env.step(action)
+                reward = float(result.reward)
+                done = bool(result.done)
 
-                if not isinstance(obs, dict):
-                    print("[ERROR] Invalid step response")
-                    break
-
-                reward = obs.get("reward", 0.0)
-                done = obs.get("done", True)
-                state = obs.get("observation", {})
+                # ✅ Extract next state safely
+                state = extract_state(result)
 
                 rewards.append(reward)
                 total_reward += reward
@@ -90,6 +109,7 @@ async def run():
                 print(f"[STEP ERROR] {step_error}")
                 break
 
+        # ✅ Score calculation
         score = max(0, min(1, (total_reward + 5) / 10))
         success = score > 0.5
 
