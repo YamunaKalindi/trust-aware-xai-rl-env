@@ -10,6 +10,11 @@ logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 import asyncio
 
+import sys
+import os
+
+sys.path.append(os.getcwd())
+
 from llm_agent import get_action_from_llm
 from server.trust_xai_env_environment import TrustXaiEnvironment
 
