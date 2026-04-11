@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 7860
 
-CMD ["python", "trust_xai_env/server/app.py"]
+CMD ["python", "server/app.py"]
