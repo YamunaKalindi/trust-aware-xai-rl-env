@@ -21,7 +21,7 @@ def reset(body: dict = {}):
 
 @app.post("/step")
 def step(action: Action):
-    obs = env.step(action.dict())   # ✅ pass dict
+    obs = env.step({"action": action})  # ✅ pass dict
     return obs   # ✅ directly return dict
 
 

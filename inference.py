@@ -15,7 +15,7 @@ import sys
 sys.path.append(os.getcwd())
 
 from llm_agent import get_action_from_llm
-from client import TrustXaiEnv
+from server.trust_xai_env_environment import TrustXaiEnvironment
 
 
 TASK_NAME = "trust-xai"
@@ -46,15 +46,15 @@ def log_end(success, steps, score, rewards):
 
 def extract_state(result):
     """
-    Safely extract state from OpenEnv StepResult / ResetResult
+    Extract structured state from dict-based environment output
     """
     try:
-        obs = result.observation.observation
+        obs = result.get("observation", {})
 
         return {
             "prediction": obs.get("prediction", ""),
             "features": obs.get("features", ""),
-            "user_type": obs.get("user_type", ""),
+            "user_type": obs.get("user_type", "beginner"),
             "trust_score": obs.get("trust_score", 0.5),
         }
 
@@ -70,12 +70,11 @@ def extract_state(result):
 
 async def run():
     try:
-        # ✅ Connect to Dockerized OpenEnv
-        env = await TrustXaiEnv.from_docker_image("trust_xai_env-env:latest")
+        # ✅ Use local environment (correct for evaluator)
+        env = TrustXaiEnvironment()
 
         # ✅ Reset
-        result = await env.reset()
-
+        result = env.reset()
         state = extract_state(result)
 
         rewards = []
@@ -85,16 +84,16 @@ async def run():
 
         for step in range(1, MAX_STEPS + 1):
             try:
-                # ✅ Get action from LLM
+                # ✅ Get action
                 action_str = get_action_from_llm(state)
 
                 # ✅ Step environment
-                result = await env.step({"action": action_str})
+                result = env.step({"action": action_str})
 
-                reward = float(result.reward)
-                done = bool(result.done)
+                reward = float(result.get("reward", 0.0))
+                done = bool(result.get("done", True))
 
-                # ✅ Extract next state safely
+                # ✅ Extract next state
                 state = extract_state(result)
 
                 rewards.append(reward)
