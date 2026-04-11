@@ -71,10 +71,10 @@ def extract_state(result):
 async def run():
     try:
         # ✅ Connect to Dockerized OpenEnv
-        env = TrustXaiEnv.from_docker_image("trust_xai_env-env:latest")
+        env = await TrustXaiEnv.from_docker_image("trust_xai_env-env:latest")
 
         # ✅ Reset
-        result = env.reset()
+        result = await env.reset()
 
         state = extract_state(result)
 
