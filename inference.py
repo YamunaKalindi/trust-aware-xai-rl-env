@@ -89,7 +89,7 @@ async def run():
                 action_str = get_action_from_llm(state)
 
                 # ✅ Step environment
-                result = env.step({"action": action_str})
+                result = await env.step({"action": action_str})
 
                 reward = float(result.reward)
                 done = bool(result.done)
