@@ -79,7 +79,13 @@ async def run():
 
         for step in range(1, MAX_STEPS + 1):
             try:
-                action_str = get_action_from_llm(state)
+                try:
+                    action_str = get_action_from_llm(state)
+                    if not isinstance(action_str, str):
+                        action_str = "simple"
+                except Exception as e:
+                    print(f"[LLM ERROR] {e}")
+                    action_str = "simple"
 
                 result = env.step({"action": action_str})
 
