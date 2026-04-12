@@ -11,7 +11,6 @@ logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 import asyncio
 import sys
 
-# Ensure current directory is in path
 sys.path.append(os.getcwd())
 
 from llm_agent import get_action_from_llm
@@ -44,18 +43,26 @@ def log_end(success, steps, score, rewards):
     )
 
 
+# ✅ FIXED: parse STRING observation correctly
 def extract_state(result):
-    """
-    Extract structured state from dict-based environment output
-    """
     try:
-        obs = result.get("observation", {})
+        obs_str = result.get("observation", "")
+
+        parts = obs_str.split("|")
+
+        prediction = parts[0].strip() if len(parts) > 0 else ""
+        features = parts[1].strip() if len(parts) > 1 else ""
+        user_type = parts[2].strip() if len(parts) > 2 else "beginner"
+
+        trust_score = 0.5
+        if len(parts) > 3 and "trust=" in parts[3]:
+            trust_score = float(parts[3].split("=")[-1])
 
         return {
-            "prediction": obs.get("prediction", ""),
-            "features": obs.get("features", ""),
-            "user_type": obs.get("user_type", "beginner"),
-            "trust_score": obs.get("trust_score", 0.5),
+            "prediction": prediction,
+            "features": features,
+            "user_type": user_type,
+            "trust_score": trust_score,
         }
 
     except Exception as e:
@@ -70,10 +77,8 @@ def extract_state(result):
 
 async def run():
     try:
-        # ✅ Use local environment (correct for evaluator)
         env = TrustXaiEnvironment()
 
-        # ✅ Reset
         result = env.reset()
         state = extract_state(result)
 
@@ -84,16 +89,13 @@ async def run():
 
         for step in range(1, MAX_STEPS + 1):
             try:
-                # ✅ Get action
                 action_str = get_action_from_llm(state)
 
-                # ✅ Step environment
                 result = env.step({"action": action_str})
 
                 reward = float(result.get("reward", 0.0))
                 done = bool(result.get("done", True))
 
-                # ✅ Extract next state
                 state = extract_state(result)
 
                 rewards.append(reward)
@@ -108,7 +110,6 @@ async def run():
                 print(f"[STEP ERROR] {step_error}")
                 break
 
-        # ✅ Score calculation
         score = max(0, min(1, (total_reward + 5) / 10))
         success = score > 0.5
 
