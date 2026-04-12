@@ -46,23 +46,13 @@ def log_end(success, steps, score, rewards):
 # ✅ FIXED: parse STRING observation correctly
 def extract_state(result):
     try:
-        obs_str = result.get("observation", "")
-
-        parts = obs_str.split("|")
-
-        prediction = parts[0].strip() if len(parts) > 0 else ""
-        features = parts[1].strip() if len(parts) > 1 else ""
-        user_type = parts[2].strip() if len(parts) > 2 else "beginner"
-
-        trust_score = 0.5
-        if len(parts) > 3 and "trust=" in parts[3]:
-            trust_score = float(parts[3].split("=")[-1])
+        obs = result.get("observation", {})
 
         return {
-            "prediction": prediction,
-            "features": features,
-            "user_type": user_type,
-            "trust_score": trust_score,
+            "prediction": obs.get("prediction", ""),
+            "features": obs.get("features", ""),
+            "user_type": obs.get("user_type", "beginner"),
+            "trust_score": obs.get("trust_score", 0.5),
         }
 
     except Exception as e:
