@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import uvicorn
 
-from trust_xai_env.server.trust_xai_env_environment import TrustXaiEnvironment
+from server.trust_xai_env_environment import TrustXaiEnvironment
 
 app = FastAPI()
 
@@ -21,7 +21,7 @@ def reset(body: dict = {}):
 
 @app.post("/step")
 def step(action: Action):
-    obs = env.step({"action": action})  # ✅ pass dict
+    obs = env.step({"action": action.action}) # ✅ pass dict
     return obs   # ✅ directly return dict
 
 
